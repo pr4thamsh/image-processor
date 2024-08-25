@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Image Processor</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&family=Roboto+Mono&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🖼️</text></svg>"
+    />
+    <style>
+      body {
+        font-family: "Roboto", sans-serif;
+        background-color: #121212;
+        color: #ffffff;
+        line-height: 1.6;
+        margin: 0;
+        padding: 0;
+      }
+
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+
+      h1,
+      h2 {
+        font-weight: 700;
+        text-align: center;
+      }
+
+      h1 {
+        font-size: 2.5em;
+        margin-bottom: 30px;
+      }
+
+      h2 {
+        font-size: 1.8em;
+        margin-top: 0;
+      }
+
+      form {
+        background-color: #1e1e1e;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+
+      input[type="file"] {
+        width: 100%;
+        margin-bottom: 15px;
+        font-size: 16px;
+        font-family: "Roboto Mono", monospace;
+      }
+
+      /* Custom styling for file input */
+      input[type="file"]::file-selector-button {
+        border: 2px solid #ffffff;
+        padding: 0.2em 0.4em;
+        border-radius: 4px;
+        background-color: #1e1e1e;
+        color: #ffffff;
+        transition: 0.3s;
+        cursor: pointer;
+        font-family: "Roboto", sans-serif;
+      }
+
+      input[type="file"]::file-selector-button:hover {
+        background-color: #ffffff;
+        color: #121212;
+      }
+
+      button {
+        display: block;
+        width: 100%;
+        padding: 12px;
+        background-color: #ffffff;
+        color: #121212;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 700;
+        transition: background-color 0.3s ease;
+      }
+
+      button:hover {
+        background-color: #e0e0e0;
+      }
+
+      #result,
+      #pdfResult,
+      #mergePdfResult {
+        background-color: #1e1e1e;
+        border-radius: 8px;
+        padding: 20px;
+        margin-top: 20px;
+      }
+
+      .error {
+        color: #ff6b6b;
+        font-weight: 700;
+      }
+
+      /* Add some spacing between forms */
+      #pdfForm,
+      #mergePdfForm {
+        margin-top: 40px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Image Processor</h1>
+      <form id="uploadForm" enctype="multipart/form-data">
+        <h2>Process Single Image</h2>
+        <input type="file" name="file" accept=".png,.jpg,.jpeg" />
+        <button type="submit">Upload and Process</button>
+      </form>
+      <div id="result"></div>
+
+      <form id="pdfForm" enctype="multipart/form-data">
+        <h2>Generate PDF from Images</h2>
+        <input type="file" name="files" accept=".png,.jpg,.jpeg" multiple />
+        <button type="submit">Generate PDF</button>
+      </form>
+      <div id="pdfResult"></div>
+
+      <form id="mergePdfForm" enctype="multipart/form-data">
+        <h2>Merge PDF Files</h2>
+        <input type="file" name="files" accept=".pdf" multiple />
+        <button type="submit">Merge PDFs</button>
+      </form>
+      <div id="mergePdfResult"></div>
+    </div>
+    <script>
+      // Your existing JavaScript code here
+      document
+        .getElementById("uploadForm")
+        .addEventListener("submit", function (e) {
+          e.preventDefault();
+          var formData = new FormData(this);
+          fetch("/", {
+            method: "POST",
+            body: formData,
+          })
+            .then((response) => {
+              if (
+                response.headers
+                  .get("Content-Type")
+                  .includes("application/json")
+              ) {
+                return response.json().then((data) => {
+                  if (data.error) {
+                    throw new Error(data.error);
+                  }
+                  let resultHTML = "<h2>Validation Results:</h2>";
+                  for (let [key, value] of Object.entries(
+                    data.validation_results,
+                  )) {
+                    resultHTML += `<p>${key}: ${value ? "✅" : "❌"}</p>`;
+                  }
+                  document.getElementById("result").innerHTML = resultHTML;
+                });
+              } else {
+                return response.blob().then((blob) => {
+                  const url = window.URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.style.display = "none";
+                  a.href = url;
+                  a.download = "processed_image.jpg";
+                  document.body.appendChild(a);
+                  a.click();
+                  window.URL.revokeObjectURL(url);
+                  document.getElementById("result").innerHTML =
+                    "<p>Image processed successfully and downloaded!</p>";
+                });
+              }
+            })
+            .catch((error) => {
+              document.getElementById(
+                "result",
+              ).innerHTML = `<p class="error">${error.message}</p>`;
+            });
+        });
+
+      document
+        .getElementById("pdfForm")
+        .addEventListener("submit", function (e) {
+          e.preventDefault();
+          var formData = new FormData(this);
+          fetch("/generate_pdf", {
+            method: "POST",
+            body: formData,
+          })
+            .then((response) => {
+              if (
+                response.headers
+                  .get("Content-Type")
+                  .includes("application/json")
+              ) {
+                return response.json().then((data) => {
+                  if (data.error) {
+                    throw new Error(data.error);
+                  }
+                  document.getElementById("pdfResult").innerHTML =
+                    "<p>PDF generated successfully!</p>";
+                });
+              } else {
+                return response.blob().then((blob) => {
+                  const url = window.URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.style.display = "none";
+                  a.href = url;
+                  a.download = "processed_images.pdf";
+                  document.body.appendChild(a);
+                  a.click();
+                  window.URL.revokeObjectURL(url);
+                  document.getElementById("pdfResult").innerHTML =
+                    "<p>PDF downloaded successfully!</p>";
+                });
+              }
+            })
+            .catch((error) => {
+              document.getElementById(
+                "pdfResult",
+              ).innerHTML = `<p class="error">${error.message}</p>`;
+            });
+        });
+
+      document
+        .getElementById("mergePdfForm")
+        .addEventListener("submit", function (e) {
+          e.preventDefault();
+          var formData = new FormData(this);
+          fetch("/merge_pdfs", {
+            method: "POST",
+            body: formData,
+          })
+            .then((response) => {
+              if (
+                response.headers
+                  .get("Content-Type")
+                  .includes("application/json")
+              ) {
+                return response.json().then((data) => {
+                  if (data.error) {
+                    throw new Error(data.error);
+                  }
+                });
+              } else {
+                return response.blob().then((blob) => {
+                  const url = window.URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.style.display = "none";
+                  a.href = url;
+                  a.download = "merged.pdf";
+                  document.body.appendChild(a);
+                  a.click();
+                  window.URL.revokeObjectURL(url);
+                  document.getElementById("mergePdfResult").innerHTML =
+                    "<p>PDFs merged and downloaded successfully!</p>";
+                });
+              }
+            })
+            .catch((error) => {
+              document.getElementById(
+                "mergePdfResult",
+              ).innerHTML = `<p class="error">${error.message}</p>`;
+            });
+        });
+    </script>
+  </body>
+</html>

@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
 MIN_SIZE = (420, 540)
+MAX_SIZE = (600, 800)
 TARGET_FORMAT = 'JPEG'
 TARGET_COLOR_MODE = 'RGB'
 MAX_FILE_SIZE = 4 * 1024 * 1024  # 4 MB
@@ -29,26 +30,29 @@ def process_image(image, quality=85):
     if image.mode != TARGET_COLOR_MODE:
         image = image.convert(TARGET_COLOR_MODE)
 
-    # Calculate scaling factor if image is smaller than MIN_SIZE
-    # width, height = image.size
-    # scale_w, scale_h = MIN_SIZE[0] / width, MIN_SIZE[1] / height
-    # Use 1 if image is already larger than MIN_SIZE
-    # scale = max(scale_w, scale_h, 1)
-
-    # Resize image only if it's smaller than MIN_SIZE
-    # if scale > 1:
-    #     new_size = (int(width * scale), int(height * scale))
-    #     image = image.resize(new_size, Image.LANCZOS)
-
-     # Resize image if it's smaller than MIN_SIZE
-    if image.size[0] < MIN_SIZE[0] or image.size[1] < MIN_SIZE[1]:
-        image.thumbnail(MIN_SIZE, Image.LANCZOS)
-
+    width, height = image.size
+    
+    # Calculate scaling factors for both min and max sizes
+    scale_min_w, scale_min_h = MIN_SIZE[0] / width, MIN_SIZE[1] / height
+    scale_max_w, scale_max_h = MAX_SIZE[0] / width, MAX_SIZE[1] / height
+    
+    # If image is smaller than MIN_SIZE, scale up
+    if width < MIN_SIZE[0] or height < MIN_SIZE[1]:
+        scale = max(scale_min_w, scale_min_h)
+        new_size = (int(width * scale), int(height * scale))
+        image = image.resize(new_size, Image.LANCZOS)
+    
+    # If image is larger than MAX_SIZE, scale down
+    elif width > MAX_SIZE[0] or height > MAX_SIZE[1]:
+        scale = min(scale_max_w, scale_max_h)
+        new_size = (int(width * scale), int(height * scale))
+        image = image.resize(new_size, Image.LANCZOS)
+    
     # Save as JPEG
     buffer = io.BytesIO()
     image.save(buffer, format=TARGET_FORMAT, quality=quality)
     buffer.seek(0)
-
+    
     return buffer
 
 
@@ -68,23 +72,26 @@ def validate_image(image_buffer):
     return criteria
 
 
-def create_pdf(images):
+def create_pdf(images, landscape_mode=True):
+    from reportlab.lib.pagesizes import letter, landscape
     pdf_buffer = io.BytesIO()
-    c = canvas.Canvas(pdf_buffer, pagesize=letter)
+    # Choose orientation based on landscape_mode parameter
+    page_size = landscape(letter) if landscape_mode else letter
+    c = canvas.Canvas(pdf_buffer, pagesize=page_size)
 
     for img in images:
         img_width, img_height = img.size
         # Calculate scaling factor to fit image on page
-        width_ratio = (letter[0] - 40) / img_width
-        height_ratio = (letter[1] - 40) / img_height
+        width_ratio = (page_size[0] - 40) / img_width
+        height_ratio = (page_size[1] - 40) / img_height
         scale = min(width_ratio, height_ratio)
 
         new_width = img_width * scale
         new_height = img_height * scale
 
         # Center the image on the page
-        x_centered = (letter[0] - new_width) / 2
-        y_centered = (letter[1] - new_height) / 2
+        x_centered = (page_size[0] - new_width) / 2
+        y_centered = (page_size[1] - new_height) / 2
 
         # Convert PIL Image to ImageReader object
         img_reader = ImageReader(img)
